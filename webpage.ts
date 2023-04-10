@@ -12,11 +12,13 @@ export class Request extends Event {
     latency:number = Math.ceil(Math.random()*5) //uniform dist on interval 1,5
     latency_remaining:number = this.latency
     processing:boolean = false
+    processing_count:number = 0
 }
 class Service extends TimedDependency {
 
     name:string = ""
     service_utility = Math.random()
+    latency:number = Math.ceil(Math.random()*5)
 
 
 }
@@ -32,11 +34,17 @@ export function init_services(num_services:number,rand_utilities:boolean=true,li
 
         const new_service = new Service
         new_service.mean = Math.floor(Math.random() * 1000)
-        new_service.service_utility = Math.floor(Math.random() * 1000)
+        if (!rand_utilities){
+            //console.log(list_utilities[i])
+            new_service.service_utility = Math.round(Math.random())+1.003
+            //console.log(new_service.service_utility)
+            //new_service.service_utility = list_utilities[i]
+        } else{
+            new_service.service_utility = Math.floor(Math.random() * 10)
+        }
         service_list.list.push(new_service)
 
 
-        //console.log(new_process.mean)
     }
     return service_list
 }
@@ -48,15 +56,13 @@ async function heuristic(num_workers:number,heuristic:string,requests:Request[],
 
     if (heuristic == "MaxOverallServices") {
 
-        // const num_full_services = Math.floor(num_workers / requests.length)
-        // const partial_service_tot = num_workers % requests.length
         var all_service_utilities = []
         var allocated_service_utilities = []
         var workers_remain:boolean = true
         var tot_serviced:number = 0
 
 
-        for (let i = 0; i < services.list.length; i++) { //gather utility services
+        for (let i = 0; i < services.list.length; i++) { //gather service utilities
             all_service_utilities.push(services.list[i].service_utility)
         }
 
@@ -117,14 +123,46 @@ async function heuristic(num_workers:number,heuristic:string,requests:Request[],
 
         const leftover:number = services.list.length - requests[0].unassigned_services.length
 
-        num_full_serviceable += leftover
+        num_full_serviceable += Math.floor(leftover/services.list.length)
 
-        for (let i=0;i<num_full_serviceable;i++){
-            requests[i].assigned_services.push(...requests[i].unassigned_services)
+        var num_allocated:number = 0
+        var i:number = 0
 
+        while (num_full_serviceable>num_allocated){
+            i += 1
+            if (requests[i].unassigned_services.length === services.list.length) {
+                requests[i].assigned_services.push(...requests[i].unassigned_services)
+                num_allocated += services.list.length
+            }
         }
 
         requests[num_full_serviceable+1].assigned_services.push(...requests[num_full_serviceable+1].unassigned_services.slice(0, partial_service_needed))
+
+    } else if (heuristic == "U/L"){
+
+        var map:{[index: string]:number} = {}
+
+        for (let r=0;r<requests.length;r++){
+            for (let s=0;s<services.list.length;s++){
+                //console.log(s)
+                map[r+"-"+s] = (requests[r].utility * services.list[s].service_utility) / (requests[r].latency + services.list[s].latency)
+            }
+        }
+
+        var sortableArray = Object.entries(map);
+        var sortedArray = sortableArray.sort(([, a], [, b]) => a - b);
+        var sortedObject = Object.fromEntries(sortedArray);
+
+        var sortedObjectTrim = Object.entries(sortedObject).splice(Object.entries(sortedObject).length-num_workers,num_workers)
+
+        for (const value of sortedObjectTrim){
+            let unpack = value[0].split("-")
+            let r:number = parseInt(unpack[0])
+            let s:number = parseInt(unpack[1])
+            //console.log(r)
+            requests[r].assigned_services.push(s+1)
+
+        }
 
     }
 
@@ -147,7 +185,7 @@ function gen_reqs(num:number,num_services:number){
     var list:Request[] = []
 
     for (let i = 0; i < num;i++){
-        var rand = Math.random()
+        var rand = (Math.random()*2)+10
         var req = new Request(rand.toString())
         req.unassigned_services = Array(num_services).fill(1).map( (_, i) => i+1 )
 
@@ -158,33 +196,44 @@ function gen_reqs(num:number,num_services:number){
 async function allocate(reqs:Request[],services:Services){
     return new Promise<number>(resolve => {
 
+        var _psuedo_work:number = 0
         var tot_utility:number = 0
 
         for (let curr_req = 0; curr_req < reqs.length; curr_req++) {
 
             let curr_req_services: number[] = reqs[curr_req].assigned_services
+            let req_obj: Request = reqs[curr_req]
+
+            if (curr_req_services.length > 0){ //if has assigned services, set to 'processing'
+                req_obj.processing = true
+                req_obj.processing_count = curr_req_services.length
+                req_obj.latency_remaining = get_packaged_latency(req_obj,services)
+            }
+
+            if (req_obj.processing){ //if processing, decrement latency
+                req_obj.latency_remaining --
+                if (curr_req_services.length > 0){
+                    req_obj.latency_remaining += req_obj.latency //if second set of services allocated, add to total lat
+                }
+            }
+
+            if (req_obj.latency_remaining === 0){ //if complete, no longer processing
+
+                req_obj.processing = false
+                req_obj.latency_remaining = req_obj.latency //reset remaining latency if future services need to be processed
+            }
 
             for (let curr_service = 0; curr_service < curr_req_services.length; curr_service++) {
-
+                _psuedo_work ++
                 let service_obj: Service = services.list[curr_req_services[curr_service]-1]
-                let req_obj: Request = reqs[curr_req]
 
                 execute(req_obj, service_obj)
-
-                req_obj.latency_remaining --
-
-                if (req_obj.latency_remaining === 0){
-
-                    req_obj.processing = false
-                    req_obj.latency_remaining = req_obj.latency //reset remaining latency if future services need to be processed
-                }
-
+                //console.log(service_obj.service_utility + req_obj.utility)
                 tot_utility += service_obj.service_utility * req_obj.utility
 
-                //req_obj.response.responsePayload = resp
+            }
+            }
 
-            }
-            }
         clean_services(reqs)
         resolve(tot_utility)
         })
@@ -193,9 +242,24 @@ async function allocate(reqs:Request[],services:Services){
 
 async function execute(req_obj:Request,service_obj:Service) {
 
+
     return await service_obj.accept(req_obj)
 }
 
+function get_packaged_latency(req_obj:Request,services:Services){
+
+    let max_latency:number = 0
+    let curr_latency = max_latency
+
+    for (let i=0;i<req_obj.assigned_services.length;i++){
+        curr_latency = services.list[req_obj.assigned_services[i]-1].latency
+        if (curr_latency > max_latency){
+            max_latency = curr_latency
+        }
+    }
+
+    return req_obj.latency + max_latency
+}
 
 function clean_services(reqs:Request[]){
 
@@ -221,7 +285,7 @@ function get_avail_workers(num_workers:number,requests:Request[]){
     var num_still_working:number = 0
     for (let i=0;i<requests.length;i++){
         if (requests[i].processing){
-            num_still_working ++
+            num_still_working += requests[i].processing_count
         }
     }
     return num_still_working
@@ -234,7 +298,7 @@ async function build(soak:number,peak:number,ttp:number,num_services:number,num_
     var ttl_utility:number = 0
     var ttl_updates:number = 0
 
-    var services = init_services(num_services,false,[0.7,0.3,0.6,0.75,0.4,0.45,0.2,0.35,0.2,0.05],["img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"])
+    var services = init_services(num_services,false,[.9,.9,.8,.8,.8,0.1,0.1,0.1,0.1,0.1],["img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"])
 
 
     for (let iter = 0;iter<ttp;iter++) { //ramp up
@@ -271,7 +335,7 @@ async function build(soak:number,peak:number,ttp:number,num_services:number,num_
         curr_reqs_num -= increase_per_tick
     }
 
-    console.log(ttl_updates)
+    //console.log(ttl_updates)
     return ttl_utility
 
 }
@@ -280,7 +344,7 @@ async function build(soak:number,peak:number,ttp:number,num_services:number,num_
 async function testing(iter:number){
     var utilities:number[] = []
     for (let i = 0;i<iter;i++) {
-        await build(10,100,5,10,50).then((util)=> {
+        await build(15,30,5,10,10).then((util)=> {
 
             utilities.push(util)
         })
@@ -288,4 +352,5 @@ async function testing(iter:number){
     console.log(utilities)
     return utilities
 }
+
 console.log(testing(10))
