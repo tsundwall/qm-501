@@ -1,9 +1,14 @@
+// const srcPath:string = "C:/Users/Tanner/Documents/CS501R/QM/"
 
-const srcPath:string = "C:/Users/Tanner/Documents/CS501R/QM/"
+// import { TimedDependency, stageSummary, simulation, LRUCache, eventSummary, metronome, Event, Worker, ServiceQueue, WrappedStage, Timeout, Retry } from "C:/Users/Tanner/Documents/CS501R/QM/src";
+// import {FIFOServiceQueue, ResponsePayload, Stage} from "C:/Users/Tanner/Documents/CS501R/QM/src";
+// import { MathFunctions } from "C:/Users/Tanner/Documents/CS501R/QM/src";
 
-import { TimedDependency, stageSummary, simulation, LRUCache, eventSummary, metronome, Event, Worker, ServiceQueue, WrappedStage, Timeout, Retry } from "C:/Users/Tanner/Documents/CS501R/QM/src";
-import {FIFOServiceQueue, ResponsePayload, Stage} from "C:/Users/Tanner/Documents/CS501R/QM/src";
-import { MathFunctions } from "C:/Users/Tanner/Documents/CS501R/QM/src";
+const srcPath:string = "~/Desktop/cs-501/quartermaster-analysis/QM"
+
+import { TimedDependency, stageSummary, simulation, LRUCache, eventSummary, metronome, Event, Worker, ServiceQueue, WrappedStage, Timeout, Retry } from "../quartermaster/src";
+import {FIFOServiceQueue, ResponsePayload, Stage} from "../quartermaster/src";
+import { MathFunctions } from "../quartermaster/src";
 
 export class Request extends Event {
     assigned_services:number[] = []
@@ -41,6 +46,7 @@ export function init_services(num_services:number,rand_utilities:boolean=true,li
     return service_list
 }
 
+// TODO split the code inside each "if (heuristic == "...")" into functions.
 async function heuristic(num_workers:number,heuristic:string,requests:Request[],services:Services) {
 
     const num_processing:number = get_avail_workers(num_workers,requests)
@@ -155,6 +161,10 @@ function gen_reqs(num:number,num_services:number){
     }
     return list
 }
+
+// TODO notice that inside allocate and clean_services, there are repeated for loops for iterating over 
+// requests and reqs[curr_req].assigned_services. These could instead extend from an abstract function,
+// with different behavior inside.
 async function allocate(reqs:Request[],services:Services){
     return new Promise<number>(resolve => {
 
@@ -237,6 +247,8 @@ async function build(soak:number,peak:number,ttp:number,num_services:number,num_
     var services = init_services(num_services,false,[0.7,0.3,0.6,0.75,0.4,0.45,0.2,0.35,0.2,0.05],["img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"])
 
 
+    // TODO make an abstract function for each of the following functions. 
+    // The abstract function will have hook methods to account for differences. 
     for (let iter = 0;iter<ttp;iter++) { //ramp up
         ttl_updates ++
         let new_reqs:Request[] = gen_reqs(curr_reqs_num,num_services)
