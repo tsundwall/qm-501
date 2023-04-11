@@ -7,26 +7,12 @@
 const srcPath:string = "~/Desktop/cs-501/quartermaster-analysis/QM"
 
 import { TimedDependency, stageSummary, simulation, LRUCache, eventSummary, metronome, Event, Worker, ServiceQueue, WrappedStage, Timeout, Retry } from "../quartermaster/src";
-import {FIFOServiceQueue, ResponsePayload, Stage} from "../quartermaster/src";
+import { FIFOServiceQueue, ResponsePayload, Stage } from "../quartermaster/src";
 import { MathFunctions } from "../quartermaster/src";
-
-export class Request extends Event {
-    assigned_services:number[] = []
-    unassigned_services:number[] = []
-    utility:number = Math.random()
-    latency:number = Math.ceil(Math.random()*5) //uniform dist on interval 1,5
-    latency_remaining:number = this.latency
-    processing:boolean = false
-    processing_count:number = 0
-}
-class Service extends TimedDependency {
-
-    name:string = ""
-    service_utility = Math.random()
-    latency:number = Math.ceil(Math.random()*5)
+import { Request, Service } from "./resources";
 
 
-}
+
 
 type Services = {
     list: Service[]
@@ -54,125 +40,128 @@ export function init_services(num_services:number,rand_utilities:boolean=true,li
     return service_list
 }
 
-// TODO split the code inside each "if (heuristic == "...")" into functions.
 async function heuristic(num_workers:number,heuristic:string,requests:Request[],services:Services) {
 
     const num_processing:number = get_avail_workers(num_workers,requests)
     num_workers -= num_processing
 
     if (heuristic == "MaxOverallServices") {
-
-        var all_service_utilities = []
-        var allocated_service_utilities = []
-        var workers_remain:boolean = true
-        var tot_serviced:number = 0
-
-
-        for (let i = 0; i < services.list.length; i++) { //gather service utilities
-            all_service_utilities.push(services.list[i].service_utility)
-        }
-
-        while (workers_remain){
-            var max = Math.max(...all_service_utilities)
-            var service_index = all_service_utilities.indexOf(max)
-            allocated_service_utilities.push(service_index)
-            if (service_index !== -1) {
-                all_service_utilities.splice(service_index, 1);
-            }
-
-            var serviceable_reqs:number[] = get_serviceable_reqs(requests,service_index)
-
-            if (tot_serviced + serviceable_reqs.length > num_workers) { //if all reqs cant be serviced for current service, get first n
-                let remaining_workers:number = num_workers - tot_serviced
-
-                for (let i = 0; i < remaining_workers; i++) {
-                    requests[serviceable_reqs[i]].assigned_services.push(service_index)
-                }
-
-                workers_remain = false
-
-            } else{
-                for (let i = 0; i < serviceable_reqs.length; i++) {
-                    requests[serviceable_reqs[i]].assigned_services.push(service_index)
-                }
-
-            }
-
-            tot_serviced += serviceable_reqs.length
-
-        }
-
-
-
-
+        max_overall_services(num_workers,requests,services)
     } else if (heuristic == "Random") {
-
-        let tot_serviced:number = 0
-
-        while (tot_serviced < num_workers) {
-            let curr_request_index = Math.floor(Math.random() * requests.length)
-            let curr_service_index = Math.floor(Math.random() * services.list.length)
-
-            if (requests[curr_request_index].unassigned_services.indexOf(curr_service_index) !== -1) {
-
-                requests[curr_request_index].assigned_services.push(curr_service_index)
-                tot_serviced += 1
-
-            }
-        }
-
-
+        random(num_workers,requests,services)
     } else if (heuristic == "FIFO"){
-
-        var num_full_serviceable:number = num_workers / services.list.length
-        const partial_service_needed:number = num_workers % services.list.length
-
-        const leftover:number = services.list.length - requests[0].unassigned_services.length
-
-        num_full_serviceable += Math.floor(leftover/services.list.length)
-
-        var num_allocated:number = 0
-        var i:number = 0
-
-        while (num_full_serviceable>num_allocated){
-            i += 1
-            if (requests[i].unassigned_services.length === services.list.length) {
-                requests[i].assigned_services.push(...requests[i].unassigned_services)
-                num_allocated += services.list.length
-            }
-        }
-
-        requests[num_full_serviceable+1].assigned_services.push(...requests[num_full_serviceable+1].unassigned_services.slice(0, partial_service_needed))
-
+        fifo(num_workers,requests,services)
     } else if (heuristic == "U/L"){
+        u_l(num_workers,requests,services)
+    }
+}
 
-        var map:{[index: string]:number} = {}
+function max_overall_services(num_workers:number,requests:Request[],services:Services) {
+    var all_service_utilities:number[] = []
+    var allocated_service_utilities:number[] = []
+    var workers_remain:boolean = true
+    var tot_serviced:number = 0
 
-        for (let r=0;r<requests.length;r++){
-            for (let s=0;s<services.list.length;s++){
-                //console.log(s)
-                map[r+"-"+s] = (requests[r].utility * services.list[s].service_utility) / (requests[r].latency + services.list[s].latency)
-            }
-        }
 
-        var sortableArray = Object.entries(map);
-        var sortedArray = sortableArray.sort(([, a], [, b]) => a - b);
-        var sortedObject = Object.fromEntries(sortedArray);
-
-        var sortedObjectTrim = Object.entries(sortedObject).splice(Object.entries(sortedObject).length-num_workers,num_workers)
-
-        for (const value of sortedObjectTrim){
-            let unpack = value[0].split("-")
-            let r:number = parseInt(unpack[0])
-            let s:number = parseInt(unpack[1])
-            //console.log(r)
-            requests[r].assigned_services.push(s+1)
-
-        }
-
+    for (let i = 0; i < services.list.length; i++) { //gather service utilities
+        all_service_utilities.push(services.list[i].service_utility)
     }
 
+    while (workers_remain){
+        var max = Math.max(...all_service_utilities)
+        var service_index = all_service_utilities.indexOf(max)
+        allocated_service_utilities.push(service_index)
+        if (service_index !== -1) {
+            all_service_utilities.splice(service_index, 1);
+        }
+
+        var serviceable_reqs:number[] = get_serviceable_reqs(requests,service_index)
+
+        if (tot_serviced + serviceable_reqs.length > num_workers) { //if all reqs cant be serviced for current service, get first n
+            let remaining_workers:number = num_workers - tot_serviced
+
+            for (let i = 0; i < remaining_workers; i++) {
+                requests[serviceable_reqs[i]].assigned_services.push(service_index)
+            }
+
+            workers_remain = false
+
+        } else{
+            for (let i = 0; i < serviceable_reqs.length; i++) {
+                requests[serviceable_reqs[i]].assigned_services.push(service_index)
+            }
+
+        }
+
+        tot_serviced += serviceable_reqs.length
+
+    }
 }
+
+function random(num_workers:number,requests:Request[],services:Services) {
+    let tot_serviced:number = 0
+
+    while (tot_serviced < num_workers) {
+        let curr_request_index = Math.floor(Math.random() * requests.length)
+        let curr_service_index = Math.floor(Math.random() * services.list.length)
+
+        if (requests[curr_request_index].unassigned_services.indexOf(curr_service_index) !== -1) {
+
+            requests[curr_request_index].assigned_services.push(curr_service_index)
+            tot_serviced += 1
+
+        }
+    }
+}
+
+function fifo(num_workers:number,requests:Request[],services:Services) {
+    var num_full_serviceable:number = num_workers / services.list.length
+    const partial_service_needed:number = num_workers % services.list.length
+
+    const leftover:number = services.list.length - requests[0].unassigned_services.length
+
+    num_full_serviceable += Math.floor(leftover/services.list.length)
+
+    var num_allocated:number = 0
+    var i:number = 0
+
+    while (num_full_serviceable>num_allocated){
+        i += 1
+        if (requests[i].unassigned_services.length === services.list.length) {
+            requests[i].assigned_services.push(...requests[i].unassigned_services)
+            num_allocated += services.list.length
+        }
+    }
+
+    requests[num_full_serviceable+1].assigned_services.push(...requests[num_full_serviceable+1].unassigned_services.slice(0, partial_service_needed))
+}
+
+function u_l(num_workers:number,requests:Request[],services:Services) {
+    var map:{[index: string]:number} = {}
+
+    for (let r=0;r<requests.length;r++){
+        for (let s=0;s<services.list.length;s++){
+            //console.log(s)
+            map[r+"-"+s] = (requests[r].utility * services.list[s].service_utility) / (requests[r].latency + services.list[s].latency)
+        }
+    }
+
+    var sortableArray = Object.entries(map);
+    var sortedArray = sortableArray.sort(([, a], [, b]) => a - b);
+    var sortedObject = Object.fromEntries(sortedArray);
+
+    var sortedObjectTrim = Object.entries(sortedObject).splice(Object.entries(sortedObject).length-num_workers,num_workers)
+
+    for (const value of sortedObjectTrim){
+        let unpack = value[0].split("-")
+        let r:number = parseInt(unpack[0])
+        let s:number = parseInt(unpack[1])
+        //console.log(r)
+        requests[r].assigned_services.push(s+1)
+
+    }
+}
+
 
 function get_serviceable_reqs(reqs:Request[],service_index:number){
 
