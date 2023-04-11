@@ -179,8 +179,8 @@ export class Webpage extends WebpageBase {
     }
 
     // TODO notice that inside allocate and clean_services, there are repeated for loops for iterating over 
-    // requests and reqs[curr_req].assigned_services. These could instead extend from an abstract function,
-    // with different behavior inside.
+    // requests and reqs[curr_req].assigned_services. These could instead extend from a single function,
+    // with different behavior inside of two other functions called within.
     async allocate(reqs:Request[],services:Services){
         return new Promise<number>(resolve => {
 
@@ -229,8 +229,6 @@ export class Webpage extends WebpageBase {
 
 
     async execute(req_obj:Request,service_obj:Service) {
-
-
         return await service_obj.accept(req_obj)
     }
 
@@ -283,7 +281,6 @@ export class Webpage extends WebpageBase {
     async testing(iter:number) {
         var utilities:number[] = []
         for (let i = 0;i<iter;i++) {
-            console.log("testing " + i.toString())
             await this.build(15,30,5,10,10).then((util)=> {
                 utilities.push(util)
             })

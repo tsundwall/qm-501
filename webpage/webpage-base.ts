@@ -4,6 +4,14 @@ export type Services = {
     list: Service[]
 }
 
+export interface BuildPhaseContract {
+    increase_per_tick:number,
+    curr_reqs_num:number;
+    all_reqs:Request[];
+    ttl_utility:number;
+    ttl_updates:number;
+}
+
 export abstract class WebpageBase {
 
     protected service_utilities: number[] = [];
@@ -18,6 +26,14 @@ export abstract class WebpageBase {
         var ttl_utility:number = 0
         var ttl_updates:number = 0
 
+        var build_phase_contract: BuildPhaseContract = {
+            increase_per_tick: increase_per_tick,
+            curr_reqs_num: curr_reqs_num,
+            all_reqs: all_reqs,
+            ttl_utility: ttl_utility,
+            ttl_updates: ttl_updates,
+        }
+
         var services = this.init_services(num_services,false,[.9,.9,.8,.8,.8,0.1,0.1,0.1,0.1,0.1],
             [
             "img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"
@@ -25,71 +41,54 @@ export abstract class WebpageBase {
         )
         
         await this.build_phase(
-            all_reqs,
-            curr_reqs_num,
             heuristic_name,
             num_services,
             num_workers,
             soak,
             services,
-            ttl_updates, 
-            ttl_utility,
-            increase_per_tick,
-            1
+            1,
+            build_phase_contract
         )
         await this.build_phase(
-            all_reqs,
-            curr_reqs_num,
             heuristic_name,
             num_services,
             num_workers,
             peak,
             services,
-            ttl_updates, 
-            ttl_utility,
-            increase_per_tick,
-            0
+            0,
+            build_phase_contract
         )
         await this.build_phase(
-            all_reqs,
-            curr_reqs_num,
             heuristic_name,
             num_services,
             num_workers,
             ttp,
             services,
-            ttl_updates, 
-            ttl_utility,
-            increase_per_tick,
-            -1
+            -1,
+            build_phase_contract
         )
 
-        return ttl_utility
+        return build_phase_contract.ttl_utility
     }
 
     // TODO these parameters need to pass by reference instead of value as they do now.
     protected async build_phase(
-            all_reqs:Request[],
-            curr_reqs_num:number,
             heuristic_name="MaxOverallServices",
             num_services:number,
             num_workers:number,
             phase_type_dur:number,
             services: Services,
-            ttl_updates:number, 
-            ttl_utility:number,
-            increase_per_tick:number,
-            mult: number        
+            mult: number,
+            contract: BuildPhaseContract        
         ) {
-        console.log("build_phase")
         for (let iter = 0;iter<phase_type_dur;iter++) { //soak
-            ttl_updates ++
-            let new_reqs:Request[] = this.gen_reqs(curr_reqs_num,num_services)
-            all_reqs.push(...new_reqs)
-            await this.heuristic(num_workers,heuristic_name,all_reqs,services)
-            const add_utility:number = await this.allocate(all_reqs,services)
-            ttl_utility += add_utility
-            curr_reqs_num += (increase_per_tick * mult)
+            contract.ttl_updates ++
+            let new_reqs:Request[] = this.gen_reqs(contract.curr_reqs_num,num_services)
+            contract.all_reqs.push(...new_reqs)
+            await this.heuristic(num_workers,heuristic_name,contract.all_reqs,services)
+            const add_utility:number = await this.allocate(contract.all_reqs,services)
+            contract.ttl_utility += add_utility
+            contract.curr_reqs_num += (contract.increase_per_tick * mult)
         }
     }
 
