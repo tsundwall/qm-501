@@ -67,6 +67,7 @@ export abstract class WebpageBase {
         return ttl_utility
     }
 
+    // TODO these parameters need to pass by reference instead of value as they do now.
     protected async build_phase(
             all_reqs:Request[],
             curr_reqs_num:number,
