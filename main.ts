@@ -1,5 +1,5 @@
-import { Webpage } from "./webpage";
-import { WebpageBase } from "./webpage-base";
+import { Webpage } from "./webpage/webpage";
+import { WebpageBase } from "./webpage/webpage-base";
 
 var webpage: WebpageBase = new Webpage();
 

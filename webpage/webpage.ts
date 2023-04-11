@@ -6,15 +6,13 @@
 
 const srcPath:string = "~/Desktop/cs-501/quartermaster-analysis/QM"
 
-import { TimedDependency, stageSummary, simulation, LRUCache, eventSummary, metronome, Event, Worker, ServiceQueue, WrappedStage, Timeout, Retry } from "../quartermaster/src";
-import { FIFOServiceQueue, ResponsePayload, Stage } from "../quartermaster/src";
-import { MathFunctions } from "../quartermaster/src";
-import { Request, Service } from "./resources";
-import { WebpageBase } from "./webpage-base";
+import { TimedDependency, stageSummary, simulation, LRUCache, eventSummary, metronome, Event, Worker, ServiceQueue, WrappedStage, Timeout, Retry } from "../../quartermaster/src";
+import { FIFOServiceQueue, ResponsePayload, Stage } from "../../quartermaster/src";
+import { MathFunctions } from "../../quartermaster/src";
+import { Request, Service } from "../resources";
+import { WebpageBase, Services } from "./webpage-base";
 
-type Services = {
-    list: Service[]
-}
+
 
 export class Webpage extends WebpageBase {
 
@@ -180,19 +178,19 @@ export class Webpage extends WebpageBase {
         return serviceable_list
     }
 
-    gen_reqs(num:number,num_services:number){
+    // gen_reqs(num:number,num_services:number){
 
-        var list:Request[] = []
+        // var list:Request[] = []
 
-        for (let i = 0; i < num;i++){
-            var rand = (Math.random()*2)+10
-            var req = new Request(rand.toString())
-            req.unassigned_services = Array(num_services).fill(1).map( (_, i) => i+1 )
+        // for (let i = 0; i < num;i++){
+        //     var rand = (Math.random()*2)+10
+        //     var req = new Request(rand.toString())
+        //     req.unassigned_services = Array(num_services).fill(1).map( (_, i) => i+1 )
 
-            list.push(req)
-        }
-        return list
-    }
+        //     list.push(req)
+        // }
+        // return list
+    // }
 
     // TODO notice that inside allocate and clean_services, there are repeated for loops for iterating over 
     // requests and reqs[curr_req].assigned_services. These could instead extend from an abstract function,
@@ -295,58 +293,63 @@ export class Webpage extends WebpageBase {
         return num_still_working
     }
 
-    async build(soak:number,peak:number,ttp:number,num_services:number,num_workers:number,heuristic_name="MaxOverallServices"){//,list_utilities,rand_utilities){
-        const increase_per_tick = peak / ttp
-        var curr_reqs_num:number = increase_per_tick
-        var all_reqs:Request[] = []
-        var ttl_utility:number = 0
-        var ttl_updates:number = 0
+    // async build(soak:number,peak:number,ttp:number,num_services:number,num_workers:number,heuristic_name="MaxOverallServices"){//,list_utilities,rand_utilities){
+    //     const increase_per_tick = peak / ttp
+    //     var curr_reqs_num:number = increase_per_tick
+    //     var all_reqs:Request[] = []
+    //     var ttl_utility:number = 0
+    //     var ttl_updates:number = 0
 
-        var services = this.init_services(num_services,false,[.9,.9,.8,.8,.8,0.1,0.1,0.1,0.1,0.1],["img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"])
+    //     var services = this.init_services(num_services,false,[.9,.9,.8,.8,.8,0.1,0.1,0.1,0.1,0.1],
+    //         [
+    //         "img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"
+    //         ]
+    //     )
 
 
-        // TODO make an abstract function for each of the following functions. 
-        // The abstract function will have hook methods to account for differences. 
-        for (let iter = 0;iter<ttp;iter++) { //ramp up
-            ttl_updates ++
-            let new_reqs:Request[] = this.gen_reqs(curr_reqs_num,num_services)
-            all_reqs.push(...new_reqs)
-            await this.heuristic(num_workers,heuristic_name,all_reqs,services)
-            const add_utility:number = await this.allocate(all_reqs,services)
-            ttl_utility += add_utility
+    //     // TODO make an abstract function for each of the following functions. 
+    //     // The abstract function will have hook methods to account for differences. 
+    //     for (let iter = 0;iter<ttp;iter++) { //ramp up
+    //         ttl_updates ++
+    //         let new_reqs:Request[] = this.gen_reqs(curr_reqs_num,num_services)
+    //         all_reqs.push(...new_reqs)
+    //         await this.heuristic(num_workers,heuristic_name,all_reqs,services)
+    //         const add_utility:number = await this.allocate(all_reqs,services)
+    //         ttl_utility += add_utility
 
-            curr_reqs_num += increase_per_tick
-        }
+    //         curr_reqs_num += increase_per_tick
+    //     }
 
-        for (let iter = 0;iter<soak;iter++) { //soak
-            ttl_updates ++
-            let new_reqs:Request[] = this.gen_reqs(curr_reqs_num,num_services)
-            all_reqs.push(...new_reqs)
-            await this.heuristic(num_workers,heuristic_name,all_reqs,services)
-            const add_utility:number = await this.allocate(all_reqs,services)
-            ttl_utility += add_utility
-        }
+    //     for (let iter = 0;iter<soak;iter++) { //soak
+    //         ttl_updates ++
+    //         let new_reqs:Request[] = this.gen_reqs(curr_reqs_num,num_services)
+    //         all_reqs.push(...new_reqs)
+    //         await this.heuristic(num_workers,heuristic_name,all_reqs,services)
+    //         const add_utility:number = await this.allocate(all_reqs,services)
+    //         ttl_utility += add_utility
+    //     }
 
-        for (let iter = 0;iter<ttp;iter++) { //ramp down
-            ttl_updates ++
-            let new_reqs:Request[] = this.gen_reqs(curr_reqs_num,num_services)
-            all_reqs.push(...new_reqs)
-            await this.heuristic(num_workers,heuristic_name,all_reqs,services)
-            const add_utility:number = await this.allocate(all_reqs,services)
-            ttl_utility += add_utility
+    //     for (let iter = 0;iter<ttp;iter++) { //ramp down
+    //         ttl_updates ++
+    //         let new_reqs:Request[] = this.gen_reqs(curr_reqs_num,num_services)
+    //         all_reqs.push(...new_reqs)
+    //         await this.heuristic(num_workers,heuristic_name,all_reqs,services)
+    //         const add_utility:number = await this.allocate(all_reqs,services)
+    //         ttl_utility += add_utility
             
-            curr_reqs_num -= increase_per_tick
-        }
+    //         curr_reqs_num -= increase_per_tick
+    //     }
 
-        //console.log(ttl_updates)
-        return ttl_utility
+    //     //console.log(ttl_updates)
+    //     return ttl_utility
 
-    }
+    // }
 
     //build(30,100,15,10,50)
     async testing(iter:number) {
         var utilities:number[] = []
         for (let i = 0;i<iter;i++) {
+            console.log("testing " + i.toString())
             await this.build(15,30,5,10,10).then((util)=> {
                 utilities.push(util)
             })
