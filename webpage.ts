@@ -1,9 +1,5 @@
 
-const srcPath:string = "C:/Users/Tanner/Documents/CS501R/QM/"
-
-import { TimedDependency, stageSummary, simulation, LRUCache, eventSummary, metronome, Event, Worker, ServiceQueue, WrappedStage, Timeout, Retry } from "C:/Users/Tanner/Documents/CS501R/QM/src";
-import {FIFOServiceQueue, ResponsePayload, Stage} from "C:/Users/Tanner/Documents/CS501R/QM/src";
-import { MathFunctions } from "C:/Users/Tanner/Documents/CS501R/QM/src";
+import { TimedDependency, Event } from "../src";
 
 export class Request extends Event {
     assigned_services:number[] = []
@@ -14,7 +10,7 @@ export class Request extends Event {
     processing:boolean = false
     processing_count:number = 0
 }
-class Service extends TimedDependency {
+export class Service extends TimedDependency {
 
     name:string = ""
     service_utility = Math.random()
@@ -23,7 +19,7 @@ class Service extends TimedDependency {
 
 }
 
-type Services = {
+export type Services = {
     list: Service[]
 }
 export function init_services(num_services:number,rand_utilities:boolean=true,list_utilities:number[],list_names:string[]){
@@ -35,10 +31,9 @@ export function init_services(num_services:number,rand_utilities:boolean=true,li
         const new_service = new Service
         new_service.mean = Math.floor(Math.random() * 1000)
         if (!rand_utilities){
-            //console.log(list_utilities[i])
-            new_service.service_utility = Math.round(Math.random())+1.003
-            //console.log(new_service.service_utility)
-            //new_service.service_utility = list_utilities[i]
+
+            //new_service.service_utility = Math.round(Math.random())+1.003
+            new_service.service_utility = list_utilities[i]
         } else{
             new_service.service_utility = Math.floor(Math.random() * 10)
         }
@@ -49,32 +44,35 @@ export function init_services(num_services:number,rand_utilities:boolean=true,li
     return service_list
 }
 
-async function heuristic(num_workers:number,heuristic:string,requests:Request[],services:Services) {
+export async function heuristic(num_workers:number,heuristic:string,requests:Request[],services:Services) {
 
     const num_processing:number = get_avail_workers(num_workers,requests)
     num_workers -= num_processing
 
     if (heuristic == "MaxOverallServices") {
 
-        var all_service_utilities = []
+        var all_service_utilities:number[] = []
         var allocated_service_utilities = []
         var workers_remain:boolean = true
         var tot_serviced:number = 0
-
+        var service_index:number = 0
 
         for (let i = 0; i < services.list.length; i++) { //gather service utilities
             all_service_utilities.push(services.list[i].service_utility)
         }
 
+        var remaining_service_utilities:number[] = all_service_utilities.filter(() => true)
+
         while (workers_remain){
-            var max = Math.max(...all_service_utilities)
-            var service_index = all_service_utilities.indexOf(max)
+
+            var max = Math.max(...remaining_service_utilities)
+            service_index = all_service_utilities.indexOf(max)
             allocated_service_utilities.push(service_index)
             if (service_index !== -1) {
-                all_service_utilities.splice(service_index, 1);
+                remaining_service_utilities.splice(service_index, 1);
             }
 
-            var serviceable_reqs:number[] = get_serviceable_reqs(requests,service_index)
+            var serviceable_reqs:number[] = get_serviceable_reqs(requests,service_index,true)
 
             if (tot_serviced + serviceable_reqs.length > num_workers) { //if all reqs cant be serviced for current service, get first n
                 let remaining_workers:number = num_workers - tot_serviced
@@ -168,19 +166,23 @@ async function heuristic(num_workers:number,heuristic:string,requests:Request[],
 
 }
 
-function get_serviceable_reqs(reqs:Request[],service_index:number){
+export function get_serviceable_reqs(reqs:Request[],service_index:number,index_of_one:boolean){
 
     var serviceable_list:number[] = []
+    // var start:number = 0
+    // // if (index_of_one){
+    // //     start = 1
+    // // }
 
     for (let i = 0; i < reqs.length; i++){
-        if (reqs[i].unassigned_services.indexOf(service_index) !== -1){
+        if (reqs[i].unassigned_services.indexOf(service_index+1) !== -1){
             serviceable_list.push(i)
         }
     }
     return serviceable_list
 }
 
-function gen_reqs(num:number,num_services:number){
+export function gen_reqs(num:number,num_services:number){
 
     var list:Request[] = []
 
@@ -193,8 +195,8 @@ function gen_reqs(num:number,num_services:number){
     }
     return list
 }
-async function allocate(reqs:Request[],services:Services){
-    return new Promise<number>(resolve => {
+export async function allocate(reqs:Request[],services:Services,index_of_one:boolean){
+    return new Promise<number[]>(resolve => {
 
         var _psuedo_work:number = 0
         var tot_utility:number = 0
@@ -207,7 +209,7 @@ async function allocate(reqs:Request[],services:Services){
             if (curr_req_services.length > 0){ //if has assigned services, set to 'processing'
                 req_obj.processing = true
                 req_obj.processing_count = curr_req_services.length
-                req_obj.latency_remaining = get_packaged_latency(req_obj,services)
+                req_obj.latency_remaining = get_packaged_latency(req_obj,services,index_of_one)
             }
 
             if (req_obj.processing){ //if processing, decrement latency
@@ -223,9 +225,15 @@ async function allocate(reqs:Request[],services:Services){
                 req_obj.latency_remaining = req_obj.latency //reset remaining latency if future services need to be processed
             }
 
+            let start:number = 0
+
+            if (index_of_one){
+                start = 1
+            }
+
             for (let curr_service = 0; curr_service < curr_req_services.length; curr_service++) {
                 _psuedo_work ++
-                let service_obj: Service = services.list[curr_req_services[curr_service]-1]
+                let service_obj: Service = services.list[curr_req_services[curr_service]-1+start]
 
                 execute(req_obj, service_obj)
                 //console.log(service_obj.service_utility + req_obj.utility)
@@ -235,24 +243,31 @@ async function allocate(reqs:Request[],services:Services){
             }
 
         clean_services(reqs)
-        resolve(tot_utility)
+        resolve([tot_utility,_psuedo_work])
         })
     }
 
 
-async function execute(req_obj:Request,service_obj:Service) {
+export async function execute(req_obj:Request,service_obj:Service) {
 
 
     return await service_obj.accept(req_obj)
 }
 
-function get_packaged_latency(req_obj:Request,services:Services){
+export function get_packaged_latency(req_obj:Request,services:Services,index_of_one:boolean){
 
     let max_latency:number = 0
     let curr_latency = max_latency
 
+    let start:number = 0
+
+    if (index_of_one){
+        start = 1
+    }
+
+
     for (let i=0;i<req_obj.assigned_services.length;i++){
-        curr_latency = services.list[req_obj.assigned_services[i]-1].latency
+        curr_latency = services.list[req_obj.assigned_services[i]-1+start].latency
         if (curr_latency > max_latency){
             max_latency = curr_latency
         }
@@ -261,7 +276,7 @@ function get_packaged_latency(req_obj:Request,services:Services){
     return req_obj.latency + max_latency
 }
 
-function clean_services(reqs:Request[]){
+export function clean_services(reqs:Request[]){
 
     for (let i = 0;i < reqs.length;i++){
         let remove_services:number[] = reqs[i].assigned_services
@@ -280,7 +295,7 @@ function clean_services(reqs:Request[]){
     }
 }
 
-function get_avail_workers(num_workers:number,requests:Request[]){
+export function get_avail_workers(num_workers:number,requests:Request[]){
 
     var num_still_working:number = 0
     for (let i=0;i<requests.length;i++){
@@ -291,15 +306,21 @@ function get_avail_workers(num_workers:number,requests:Request[]){
     return num_still_working
 }
 
-async function build(soak:number,peak:number,ttp:number,num_services:number,num_workers:number,heuristic_name="MaxOverallServices"){//,list_utilities,rand_utilities){
+export async function build(soak:number,peak:number,ttp:number,num_services:number,num_workers:number,services_list:number[],heuristic_name:string){//,list_utilities,rand_utilities){
     const increase_per_tick = peak / ttp
     var curr_reqs_num:number = increase_per_tick
     var all_reqs:Request[] = []
     var ttl_utility:number = 0
     var ttl_updates:number = 0
+    var ttl_reqs:number = 0
 
-    var services = init_services(num_services,false,[.9,.9,.8,.8,.8,0.1,0.1,0.1,0.1,0.1],["img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"])
+    var services = init_services(num_services,false,services_list,["img1","otherImgs","buyNow","atc","suggestions","reviews","details","boughtWith","header","footer"])
 
+    if (heuristic_name==="MaxOverallServices"){
+        var index_of_one:boolean = true
+    } else {
+        var index_of_one:boolean = false
+    }
 
     for (let iter = 0;iter<ttp;iter++) { //ramp up
         ttl_updates ++
@@ -307,8 +328,12 @@ async function build(soak:number,peak:number,ttp:number,num_services:number,num_
         all_reqs.push(...new_reqs)
 
         await heuristic(num_workers,heuristic_name,all_reqs,services)
-        const add_utility:number = await allocate(all_reqs,services)
+        let unpack = await allocate(all_reqs,services,index_of_one)
 
+        const add_utility:number = unpack[0]
+        const add_reqs_served:number = unpack[1]
+
+        ttl_reqs += add_reqs_served
         ttl_utility += add_utility
 
         curr_reqs_num += increase_per_tick
@@ -319,7 +344,12 @@ async function build(soak:number,peak:number,ttp:number,num_services:number,num_
         let new_reqs:Request[] = gen_reqs(curr_reqs_num,num_services)
         all_reqs.push(...new_reqs)
         await heuristic(num_workers,heuristic_name,all_reqs,services)
-        const add_utility:number = await allocate(all_reqs,services)
+        let unpack = await allocate(all_reqs,services,index_of_one)
+
+        const add_utility:number = unpack[0]
+        const add_reqs_served:number = unpack[1]
+
+        ttl_reqs += add_reqs_served
         ttl_utility += add_utility
 
     }
@@ -329,28 +359,47 @@ async function build(soak:number,peak:number,ttp:number,num_services:number,num_
         let new_reqs:Request[] = gen_reqs(curr_reqs_num,num_services)
         all_reqs.push(...new_reqs)
         await heuristic(num_workers,heuristic_name,all_reqs,services)
-        const add_utility:number = await allocate(all_reqs,services)
+        let unpack = await allocate(all_reqs,services,index_of_one)
+
+        const add_utility:number = unpack[0]
+        const add_reqs_served:number = unpack[1]
+
+        ttl_reqs += add_reqs_served
         ttl_utility += add_utility
 
         curr_reqs_num -= increase_per_tick
     }
 
     //console.log(ttl_updates)
-    return ttl_utility
+    return [ttl_utility,ttl_reqs]
 
 }
 
 //build(30,100,15,10,50)
-async function testing(iter:number){
+export async function testing(iter:number,peak:number,ttp:number,num_workers:number,services_array:number[],heuristic_name:string,id:string){
     var utilities:number[] = []
+    var counts:number[] = []
+
     for (let i = 0;i<iter;i++) {
-        await build(15,30,5,10,10).then((util)=> {
+        await build(20,peak,ttp,10,num_workers,services_array,heuristic_name).then(([util,count])=> {
 
             utilities.push(util)
+            counts.push(count)
         })
     }
-    console.log(utilities)
+    console.log(id)
+    console.log(heuristic_name + " Results: ")
+    console.log(mean(utilities))
+    console.log(mean(counts))
+    console.log(mean(utilities)/mean(counts))
     return utilities
 }
 
-console.log(testing(10))
+export function mean(arr:number[]){
+
+    return arr.reduce((a,b) => a + b, 0) / arr.length
+}
+
+export const heuristics = ["Random","FIFO","MaxOverallServices","U/L"]
+
+
