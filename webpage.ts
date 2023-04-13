@@ -169,10 +169,6 @@ export async function heuristic(num_workers:number,heuristic:string,requests:Req
 export function get_serviceable_reqs(reqs:Request[],service_index:number,index_of_one:boolean){
 
     var serviceable_list:number[] = []
-    // var start:number = 0
-    // // if (index_of_one){
-    // //     start = 1
-    // // }
 
     for (let i = 0; i < reqs.length; i++){
         if (reqs[i].unassigned_services.indexOf(service_index+1) !== -1){
@@ -236,7 +232,7 @@ export async function allocate(reqs:Request[],services:Services,index_of_one:boo
                 let service_obj: Service = services.list[curr_req_services[curr_service]-1+start]
 
                 execute(req_obj, service_obj)
-                //console.log(service_obj.service_utility + req_obj.utility)
+
                 tot_utility += service_obj.service_utility * req_obj.utility
 
             }
@@ -370,12 +366,12 @@ export async function build(soak:number,peak:number,ttp:number,num_services:numb
         curr_reqs_num -= increase_per_tick
     }
 
-    //console.log(ttl_updates)
+
     return [ttl_utility,ttl_reqs]
 
 }
 
-//build(30,100,15,10,50)
+
 export async function testing(iter:number,peak:number,ttp:number,num_workers:number,services_array:number[],heuristic_name:string,id:string){
     var utilities:number[] = []
     var counts:number[] = []
